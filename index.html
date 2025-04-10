@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Slack Translator</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        #messages { border: 1px solid #ddd; padding: 15px; height: 400px; overflow-y: scroll; margin-bottom: 20px; }
+        #translation-form { display: flex; flex-direction: column; gap: 10px; }
+        textarea { height: 100px; padding: 10px; }
+        button { padding: 10px 15px; background: #4CAF50; color: white; border: none; cursor: pointer; }
+        .message { margin-bottom: 15px; padding: 10px; border-radius: 5px; }
+        .received { background: #f0f0f0; }
+        .translated { background: #e6f7ff; }
+    </style>
+</head>
+<body>
+    <h1>Slack Message Translator</h1>
+    
+    <div id="messages"></div>
+    
+    <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+      <button id="test-button">Send Test Message</button>
+    </div>
+    
+    <form id="translation-form">
+        <textarea id="original-text" placeholder="Original message" readonly></textarea>
+        <textarea id="translated-text" placeholder="Translated text"></textarea>
+        <button type="submit">Send Translation</button>
+    </form>
+
+    <script src="/js/app.js"></script>
+</body>
+</html>

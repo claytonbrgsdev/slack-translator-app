@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Slack Translator</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <h1>Slack Translator</h1>
+  
+  <div style="margin-bottom: 20px;">
+    <button id="test-button" type="button">Send Test Message</button>
+  </div>
+  
+  <div class="container">
+    <!-- English Messages Column -->
+    <div class="column">
+      <h2>English Messages</h2>
+      <div id="english-messages">
+      <% messages.each do |message| %>
+          <% if message[:language] == 'en' %>
+            <div class="message">
+              <%= message[:content] %>
+            </div>
+          <% end %>
+        <% end %>
+      </div>
+    </div>
+    
+    <!-- Portuguese Messages Column -->
+    <div class="column">
+      <h2>Portuguese Translations</h2>
+      <div id="portuguese-messages">
+      <% messages.each do |message| %>
+          <% if message[:language] == 'pt' %>
+            <div class="message">
+              <%= message[:content] %>
+            </div>
+          <% end %>
+        <% end %>
+      </div>
+      
+      <!-- Reply Form -->
+      <form id="reply-form" action="/reply" method="post">
+        <textarea name="reply" placeholder="Type your reply in Portuguese..." required></textarea>
+        <input type="hidden" name="message_id" value="<%= last_message_id %>">
+        <button type="submit">Submit Reply</button>
+      </form>
+    </div>
+  </div>
+  
+  <script src="/js/app.js"></script>
+</body>
+</html>

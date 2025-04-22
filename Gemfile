@@ -19,7 +19,4 @@ gem 'securerandom'
 gem 'slack-ruby-client'
 gem 'async-websocket', '~> 0.8.0'
 
-gem 'sinatra'
-gem 'sinatra-contrib'
-
 gem 'rspec'

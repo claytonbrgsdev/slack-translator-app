@@ -3,20 +3,15 @@ require 'json'
 require 'logger'
 
 module OllamaClient
-  # URL base para a API do Ollama
   API_BASE = ENV.fetch('OLLAMA_API_URL', 'http://localhost:11434')
   
-  # Logger para fins de debug
   @@logger = Logger.new(STDOUT)
   @@available = nil # Estado do serviço ainda não testado
   
-  # Verifica se o serviço está disponível
   def self.available?
-    # Forçar nova verificação a cada chamada (não usar cache)
     @@available = nil
     
     begin
-      # Usar a lista de modelos para verificar se o serviço está disponível
       models_url = "#{API_BASE}/api/tags"
       @@logger.info "Verificando modelos Ollama em: #{models_url}"
       
@@ -38,7 +33,6 @@ module OllamaClient
     @@available
   end
   
-  # Obter lista de modelos disponíveis
   def self.available_models
     begin
       response = HTTP.timeout(2).get("#{API_BASE}/api/tags")
@@ -53,13 +47,10 @@ module OllamaClient
     end
   end
   
-  # Selecionar modelo apropriado
   def self.select_model
     models = available_models
-    # Preferências de modelo em ordem
     preferences = ['llama3.1:8b', 'llama3', 'llama2', 'mistral', 'deepseek']
     
-    # Encontrar o primeiro modelo disponível que corresponda às preferências
     selected = nil
     preferences.each do |pref|
       match = models.find { |m| m.include?(pref) }
@@ -69,19 +60,15 @@ module OllamaClient
       end
     end
     
-    # Se nenhum dos preferidos estiver disponível, use o primeiro da lista
     selected || models.first
   end
 
-  # Traduz texto de inglês para português
   def self.translate_en_to_pt(text)
     return "[Tradução indisponível - Ollama não está rodando]" unless available?
     
     begin
-      # Usar o endpoint correto para a versão atual do Ollama
       generate_url = "#{API_BASE}/api/generate"
       
-      # Selecionar modelo disponível
       model = select_model
       @@logger.info "Enviando tradução para: #{generate_url} usando modelo: #{model || 'padrão'}"
       
@@ -112,15 +99,12 @@ module OllamaClient
     end
   end
   
-  # Traduz texto de português para inglês
   def self.translate_pt_to_en(text)
     return "[Translation unavailable - Ollama is not running]" unless available?
     
     begin
-      # Usar o endpoint correto para a versão atual do Ollama
       generate_url = "#{API_BASE}/api/generate"
       
-      # Selecionar modelo disponível
       model = select_model
       @@logger.info "Enviando tradução para: #{generate_url} usando modelo: #{model || 'padrão'}"
       

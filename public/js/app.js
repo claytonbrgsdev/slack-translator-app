@@ -1,78 +1,81 @@
 document.addEventListener('DOMContentLoaded', function() {
-  // Connect to SSE endpoint
-  const eventSource = new EventSource('/sse');
+  console.log('SlackTranslator UI inicializada');
   
-  eventSource.onmessage = function(event) {
-    console.log("SSE event received:", event.data);
-    try {
-      const data = JSON.parse(event.data);
-      
-      let column, messageContent;
-      if(data.status === 'received') {
-        column = document.getElementById('english-messages');
-        messageContent = data.original;
-      } else if(data.status === 'translated') {
-        column = document.getElementById('portuguese-messages');
-        messageContent = data.translated_text;
-      } else if (data.status === 'reply_translated') {
-        const portugueseCol = document.getElementById('portuguese-messages');
-        const englishCol = document.getElementById('english-messages');
-
-        const replyDiv = document.createElement('div');
-        replyDiv.className = 'message';
-        replyDiv.innerHTML = data.reply;
-        portugueseCol.appendChild(replyDiv);
-
-        const translatedReplyDiv = document.createElement('div');
-        translatedReplyDiv.className = 'message';
-        translatedReplyDiv.innerHTML = data.translated_reply;
-        englishCol.appendChild(translatedReplyDiv);
-      } else {
-        console.warn('Received unknown status in SSE data:', data);
-        return;
-      }
-      
-      // Create message element
-      const messageDiv = document.createElement('div');
-      messageDiv.className = 'message';
-      
-      // Format message with timestamp if available
-      const timestamp = data.timestamp ? `<small>${new Date(data.timestamp).toLocaleTimeString()}</small><br>` : '';
-      messageDiv.innerHTML = timestamp + messageContent;
-      
-      // Add to column
-      column.appendChild(messageDiv);
-      
-      // Auto-scroll to bottom
-      column.scrollTop = column.scrollHeight;
-      
-    } catch (error) {
-      console.error('Error processing SSE message:', error);
+  const englishCol = document.getElementById('english-messages');
+  const portugueseCol = document.getElementById('portuguese-messages');
+  
+  let processedMessages = [];
+  
+  function renderMessage(message) {
+    const messageId = `${message.original}-${message.timestamp}`;
+    if (processedMessages.includes(messageId)) {
+      return;
     }
-  };
+    
+    processedMessages.push(messageId);
+    
+    const timestamp = message.timestamp 
+      ? `<small>${new Date(message.timestamp * 1000).toLocaleTimeString()}</small><br>` 
+      : '';
+    
+    const englishDiv = document.createElement('div');
+    englishDiv.className = 'message';
+    englishDiv.innerHTML = timestamp + message.original;
+    englishCol.appendChild(englishDiv);
+    
+    const portugueseDiv = document.createElement('div');
+    portugueseDiv.className = 'message';
+    portugueseDiv.innerHTML = timestamp + message.translation;
+    portugueseCol.appendChild(portugueseDiv);
+    
+    englishCol.scrollTop = englishCol.scrollHeight;
+    portugueseCol.scrollTop = portugueseCol.scrollHeight;
+    
+    console.log('Mensagem renderizada:', message.original);
+  }
   
-  eventSource.onerror = function(error) {
-    console.error('SSE Error:', error);
-    // Implement reconnection logic if needed
-  };
+  function fetchMessages() {
+    fetch('/messages')
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`Status: ${response.status}`);
+        }
+        return response.json();
+      })
+      .then(messages => {
+        console.log('Mensagens recebidas:', messages.length);
+        
+        messages.forEach(message => renderMessage(message));
+      })
+      .catch(error => {
+        console.error('Erro ao buscar mensagens:', error);
+      });
+  }
   
-  // Form submission handling
+  fetchMessages();
+  
+  setInterval(fetchMessages, 3000);
+  
+  const testButton = document.getElementById('test-button');
+  if (testButton) {
+    testButton.addEventListener('click', function(event) {
+      console.log('Botão de teste clicado');
+      event.preventDefault();
+      
+      fetch('/test-message')
+        .then(response => response.json())
+        .then(data => {
+          console.log('Mensagem de teste enviada:', data);
+          fetchMessages();
+        })
+        .catch(error => console.error('Erro ao enviar mensagem de teste:', error));
+    });
+  }
+  
   const replyForm = document.getElementById('reply-form');
   if (replyForm) {
     replyForm.addEventListener('submit', function(e) {
-      // Could add client-side validation here
+      e.preventDefault();
     });
   }
-
-  document.getElementById('test-button').addEventListener('click', function(event) {
-    console.log('Test button clicked');
-    event.preventDefault();
-    fetch('/test-message', {
-      method: 'POST',
-      credentials: 'same-origin'
-    })
-    .then(response => response.json())
-    .then(data => console.log('Test message sent:', data))
-    .catch(error => console.error('Error sending test message:', error));
-  });
 });

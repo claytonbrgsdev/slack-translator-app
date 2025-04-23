@@ -111,3 +111,83 @@ post '/add-message' do
     { error: e.message }.to_json
   end
 end
+
+# Rota para traduzir de português para inglês (para a funcionalidade de envio)
+post '/translate-to-english' do
+  begin
+    content_type 'application/json'
+    request.body.rewind
+    payload = JSON.parse(request.body.read)
+    
+    unless payload['text']
+      status 400
+      return { error: "Campo 'text' é obrigatório" }.to_json
+    end
+    
+    # Verificar se o Ollama está disponível
+    unless $slack_available
+      status 503
+      return { error: "Serviço de tradução não está disponível" }.to_json
+    end
+
+    # Traduzir o texto de português para inglês
+    translation = OllamaClient.translate_pt_to_en(payload['text'])
+    
+    # Verificar se a tradução foi bem-sucedida
+    if translation.include?("[Translation unavailable") || translation.include?("[Translation error")
+      status 500
+      return { error: translation }.to_json
+    end
+    
+    return { translation: translation }.to_json
+  rescue => e
+    status 500
+    $logger.error "Erro ao traduzir mensagem: #{e.message}"
+    return { error: e.message }.to_json
+  end
+end
+
+# Rota para enviar mensagens traduzidas para o Slack
+post '/send-to-slack' do
+  begin
+    content_type 'application/json'
+    request.body.rewind
+    payload = JSON.parse(request.body.read)
+    
+    unless payload['original'] && payload['translation']
+      status 400
+      return { error: "Campos 'original' e 'translation' são obrigatórios" }.to_json
+    end
+    
+    # Verificar se o Slack está disponível
+    unless $slack_available && ENV['SLACK_API_TOKEN'] && ENV['SLACK_CHANNEL_ID']
+      status 503
+      return { error: "Integração com Slack não está disponível" }.to_json
+    end
+    
+    # Enviar a mensagem para o canal do Slack
+    result = SlackClient.send_message_to_channel(payload['translation'])
+    
+    if result
+      # Adicionar a mensagem à lista local para exibição
+      $messages << {
+        original: payload['original'],
+        translation: payload['translation'],
+        timestamp: Time.now.to_i,
+        sent_by_user: true
+      }
+      
+      $messages = $messages.last(50) if $messages.size > 50
+      
+      $logger.info "Mensagem enviada ao Slack: #{payload['translation'][0..30]}..."
+      return { success: true }.to_json
+    else
+      status 500
+      return { error: "Falha ao enviar mensagem para o Slack" }.to_json
+    end
+  rescue => e
+    status 500
+    $logger.error "Erro ao enviar mensagem para o Slack: #{e.message}"
+    return { error: e.message }.to_json
+  end
+end

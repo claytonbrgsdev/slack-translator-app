@@ -135,8 +135,60 @@ module SlackClient
     end
   end
   
-  def self.test_message(text="Hello, this is a test message from Slack.")
+  def self.test_message(text="Hello, this is a test message from Slack.", username="Test User")
     ts = Time.now.to_f.to_s
-    process_message(ts, "[TEST] #{text}")
+    message_text = "#{username}: #{text}"
+    process_message(ts, message_text)
+  end
+  
+  # Método para enviar mensagens para o canal do Slack
+  def self.send_message_to_channel(text)
+    @logger ||= Logger.new(STDOUT)
+    
+    # Verificar se temos um cliente Slack inicializado
+    unless @web_client
+      @logger.error "Cliente Slack não está inicializado"
+      return false
+    end
+    
+    begin
+      channel_id = ENV['SLACK_CHANNEL_ID']
+      
+      # Verificar se temos um token de usuário disponível
+      if ENV['SLACK_USER_TOKEN'] && !ENV['SLACK_USER_TOKEN'].empty?
+        # Criar um cliente Slack usando o token de usuário
+        @logger.info "Usando token de usuário para enviar mensagem como você mesmo"
+        user_client = Slack::Web::Client.new(token: ENV['SLACK_USER_TOKEN'])
+        
+        @logger.info "Enviando mensagem como usuário para o canal Slack #{channel_id}: #{text[0..30]}..."
+        
+        response = user_client.chat_postMessage(
+          channel: channel_id,
+          text: text,
+          as_user: true  # Isso garante que a mensagem seja enviada como o usuário, não como o bot
+        )
+      else
+        # Usar o cliente do bot (comportamento padrão)
+        @logger.info "Usando token do bot para enviar mensagem (SLACK_USER_TOKEN não configurado)"
+        @logger.info "Enviando mensagem como bot para o canal Slack #{channel_id}: #{text[0..30]}..."
+        
+        response = @web_client.chat_postMessage(
+          channel: channel_id,
+          text: text,
+          as_user: true
+        )
+      end
+      
+      if response && response.ok
+        @logger.info "Mensagem enviada com sucesso para o Slack: #{response.ts}"
+        return true
+      else
+        @logger.error "Erro ao enviar mensagem para o Slack: #{response.error || 'Erro desconhecido'}"
+        return false
+      end
+    rescue => e
+      @logger.error "Erro ao enviar mensagem para o Slack: #{e.message}"
+      return false
+    end
   end
 end

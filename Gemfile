@@ -18,5 +18,7 @@ gem 'securerandom'
 
 gem 'slack-ruby-client'
 gem 'async-websocket', '~> 0.8.0'
+gem 'sequel'
+gem 'sqlite3'
 
 gem 'rspec'

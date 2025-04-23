@@ -2,6 +2,7 @@ require 'dotenv/load'
 require 'sinatra'
 require 'json'
 require 'logger'
+require 'sequel'
 
 begin
   require_relative 'lib/slack_client'
@@ -12,15 +13,27 @@ rescue LoadError => e
   $slack_available = false
 end
 
+DB = Sequel.connect(ENV['DATABASE_URL'] || "sqlite://db/messages.db")
+DB.create_table? :messages do
+  primary_key :id
+  String :original, text: true
+  String :translation, text: true
+  Integer :timestamp
+  String :username
+  String :user_image
+  String :user_id
+  Boolean :sent_by_me, default: false
+end
+
+class Message < Sequel::Model(:messages)
+end
+
 set :port, 3000
 set :bind, '0.0.0.0'
 set :environment, :development
 set :public_folder, File.expand_path('../public', __FILE__)
 set :views, File.expand_path('../views', __FILE__)
 set :logging, true
-
-# Iniciar com uma lista vazia de mensagens
-$messages = []
 
 configure do
   $logger = Logger.new(STDOUT)
@@ -41,7 +54,8 @@ end
 
 get '/messages' do
   content_type :json
-  $messages.to_json
+  messages = Message.order(:timestamp).all
+  messages.map(&:values).to_json
 end
 
 get '/test-message' do
@@ -69,8 +83,7 @@ get '/test-message' do
     original = "This is a test message! #{Time.now.strftime('%H:%M:%S')}"
     translation = "Esta é uma mensagem de teste! #{Time.now.strftime('%H:%M:%S')}"
     
-    $messages << {original: original, translation: translation, timestamp: Time.now.to_i, username: "Test User"}
-    $messages = $messages.last(20) if $messages.size > 20
+    Message.create(original: original, translation: translation, timestamp: Time.now.to_i, username: "Test User")
     
     content_type :json
     { status: 'ok', message: 'Test message sent (fallback)', original: original, translation: translation }.to_json
@@ -94,7 +107,7 @@ get '/status' do
     channel_id: ENV['SLACK_CHANNEL_ID'] || "não configurado",
     api_token: ENV['SLACK_API_TOKEN'] ? "configurado" : "ausente",
     app_token: ENV['SLACK_APP_TOKEN'] ? "configurado" : "ausente",
-    message_count: $messages.size,
+    message_count: Message.count,
     slack_available: $slack_available
   }.to_json
 end
@@ -178,14 +191,13 @@ post '/add-message' do
     
     $logger.info "Adicionando mensagem com username=#{payload['username'] || 'nil'} e user_image=#{payload['user_image'] ? 'presente' : 'ausente'}"
     
-    $messages << message_data
-    
-    $messages = $messages.last(50) if $messages.size > 50
+    record = Message.create(message_data)
+    message_count = Message.count
     
     $logger.info "Mensagem adicionada via API: #{payload['original'][0..30]}..."
     
     content_type :json
-    { status: 'ok', message_count: $messages.size }.to_json
+    { status: 'ok', message_count: message_count }.to_json
   rescue => e
     status 500
     $logger.error "Erro ao processar mensagem: #{e.message}"
@@ -277,38 +289,17 @@ post '/send-to-slack' do
           $logger.info "Usando detalhes reais do usuário: #{username} (#{current_user_id}) para mensagem enviada via formulário"
           
           # Adicionar a mensagem à lista local com todos os detalhes do usuário
-          $messages << {
-            original: payload['original'],
-            translation: payload['translation'],
-            timestamp: Time.now.to_i,
-            user_id: current_user_id,
-            username: username,
-            user_image: user_image,
-            sent_by_me: true  # Marcar como enviada pelo usuário atual
-          }
+          Message.create(original: payload['original'], translation: payload['translation'], timestamp: Time.now.to_i, user_id: current_user_id, username: username, user_image: user_image, sent_by_me: true)
         else
           # Fallback se não conseguirmos obter detalhes do usuário
           $logger.warn "Não foi possível obter detalhes do usuário #{current_user_id}"
-          $messages << {
-            original: payload['original'],
-            translation: payload['translation'],
-            timestamp: Time.now.to_i,
-            user_id: current_user_id,
-            sent_by_me: true
-          }
+          Message.create(original: payload['original'], translation: payload['translation'], timestamp: Time.now.to_i, user_id: current_user_id, sent_by_me: true)
         end
       else
         # Fallback se não tivermos o ID do usuário
         $logger.warn "ID do usuário atual não disponível para mensagem enviada via formulário"
-        $messages << {
-          original: payload['original'],
-          translation: payload['translation'],
-          timestamp: Time.now.to_i,
-          sent_by_me: true
-        }
+        Message.create(original: payload['original'], translation: payload['translation'], timestamp: Time.now.to_i, sent_by_me: true)
       end
-      
-      $messages = $messages.last(50) if $messages.size > 50
       
       $logger.info "Mensagem enviada ao Slack: #{payload['translation'][0..30]}..."
       return { success: true }.to_json

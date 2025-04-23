@@ -4,6 +4,57 @@
   <meta charset="UTF-8">
   <title>SlackTranslator</title>
   <link rel="stylesheet" href="/css/styles.css">
+  <style>
+    /* Estilos para mensagens em processo de envio/tradução */
+    .message.draft {
+      background-color: #f8fbf8;
+      border-left: 3px solid #5cb85c;
+      border-radius: 4px;
+      opacity: 0.9;
+      margin-bottom: 12px;
+    }
+    
+    .message.draft .message-author {
+      color: #2c662d;
+      font-weight: bold;
+      font-style: italic;
+    }
+    
+    .message.draft .message-content::before {
+      content: "Enviando: ";
+      color: #5cb85c;
+      font-style: italic;
+      font-weight: 500;
+    }
+    
+    .message-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    
+    .user-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 4px;
+      margin-right: 8px;
+    }
+    
+    .message-author {
+      font-weight: bold;
+      margin-right: 8px;
+    }
+    
+    .message-time {
+      font-size: 12px;
+      color: #616061;
+    }
+    
+    .message-content {
+      margin-left: 44px;
+      word-wrap: break-word;
+    }
+  </style>
 </head>
 <body>
   <h1>SlackTranslator</h1>
@@ -33,11 +84,65 @@
     ];
     
     // Armazenar informações do usuário atual (você) para identificação correta das mensagens
-    let myUserInfo = {
-      userId: null,  // ID do usuário atual (você)
-      name: null,    // Seu nome de usuário
-      avatar: null   // URL do seu avatar
-    };
+    let myUserInfo = { userId: '', name: '', avatar: '' };
+    let userCache = {}; // Cache para armazenar informações dos usuários já vistos
+    let userInfoLoaded = false; // Flag para controlar se já carregamos as informações do usuário
+    
+    // IMPORTANTE: Função para obter e garantir que temos o ID do usuário atual
+    // Esta função retorna uma Promise que só será resolvida quando tivermos o ID
+    async function ensureCurrentUserInfo() {
+      if (userInfoLoaded && myUserInfo.userId) {
+        console.log('☑️ Usando informações de usuário já carregadas:', myUserInfo.userId);
+        return myUserInfo;
+      }
+      
+      console.log('⚠️ IMPORTANTE: Buscando informações do usuário autenticado...');
+      
+      try {
+        // Tentar até 3 vezes para garantir que conseguimos obter o ID
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          console.log(`Tentativa ${attempt} de obter ID de usuário...`);
+          
+          const response = await fetch('/current-user-info');
+          const data = await response.json();
+          
+          if (data.user_id && data.user_id.trim() !== '') {
+            myUserInfo.userId = data.user_id.trim();
+            myUserInfo.name = data.username || 'You';
+            myUserInfo.avatar = data.user_image;
+            
+            console.log('✅ ID DE USUÁRIO CARREGADO COM SUCESSO:', myUserInfo.userId);
+            
+            // Armazenar suas informações no cache de usuários
+            userCache[myUserInfo.userId] = {
+              name: 'You', // Sempre mostra "You" para o usuário atual
+              avatar: myUserInfo.avatar,
+              id: myUserInfo.userId
+            };
+            
+            userInfoLoaded = true;
+            return myUserInfo;
+          }
+          
+          // Se não conseguimos o ID, esperar 500ms antes de tentar novamente
+          if (attempt < 3) {
+            console.warn(`ID de usuário não disponível na tentativa ${attempt}, aguardando...`);
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+        }
+        
+        console.error('❌ FALHA CRÍTICA: Não foi possível obter o ID do usuário após 3 tentativas!');
+        return null;
+      } catch (e) {
+        console.error('❌ Erro ao buscar informações do usuário:', e);
+        return null;
+      }
+    }
+    
+    // Carregar informações do usuário assim que a página iniciar
+    window.addEventListener('DOMContentLoaded', () => {
+      ensureCurrentUserInfo();
+    });
     
     // Função para buscar o ID do usuário atual diretamente do servidor
     async function fetchCurrentUserInfo() {
@@ -92,7 +197,7 @@
     }
     
     // Acompanhamento da última pessoa a enviar mensagem para criação de mensagens sequenciais
-    let lastSender = { original: null, translated: null };
+    let lastSender = { originalId: null, translatedId: null, original: null, translated: null };
     
     function addMessage(original, translation, sentByUser = false, timestamp = Date.now(), userData = null) {
       console.log('Adicionando nova mensagem:', original);
@@ -104,54 +209,69 @@
       // NOVA ABORDAGEM ROBUSTA: Agora temos seu ID de usuário real do endpoint /current-user-info
       // Isso torna a detecção muito mais confiável e não depende da ordem das mensagens
       
-      // Verificar estritamente se a mensagem é sua comparando apenas com seu ID conhecido
-      // Ignoramos completamente o flag sent_by_me que está causando problemas
-      const isReallyYou = userData && userData.user_id && myUserInfo.userId && 
-                         userData.user_id === myUserInfo.userId;
-      
-      console.log(`Verificando mensagem - ID do usuário: ${userData?.user_id || 'desconhecido'}, Seu ID: ${myUserInfo.userId || 'desconhecido'}, É realmente você? ${isReallyYou}`);
-      
-      if (isReallyYou) {
-        // É realmente uma mensagem sua
-        console.log('Mensagem confirmada como enviada por você!', userData?.user_id);
-        user = { 
-          name: 'You', 
-          avatar: userData.user_image || myUserInfo.avatar,
-          id: userData.user_id || 'your-id'
-        };
-      } else if (userData) {
-        // Mensagem de outro usuário (não é você)
-        console.log('Mensagem de outro usuário:', userData.username, userData.user_id);
-        user = {
-          name: userData.username || 'Unknown User',
-          avatar: userData.user_image,
-          id: userData.user_id || `user-${Date.now()}`
-        };
+      // SOLUÇÃO FINAL: Usar os NOMES REAIS dos usuários e não mais "You"
+      // Mesmo que os IDs estejam repetidos, os nomes de usuário estão corretos
+
+      // USAR UMA COMBINAÇÃO DE USERNAME + ID COMO IDENTIFICADOR ÚNICO
+      // Isso resolve o problema de IDs duplicados no backend
+      if (userData && userData.username) {
+        // Criar um ID composto único usando nome + ID real
+        const uniqueId = `${userData.username}_${userData.user_id || Date.now()}`;
+        console.log(`🔑 Criando identificador único: '${uniqueId}'`);
+        
+        // Verificar cache com identificador único baseado no nome + ID
+        const cachedUser = userCache[uniqueId];
+        if (cachedUser) {
+          console.log('ℹ️ Reusando usuário em cache:', userData.username);
+          user = {...cachedUser}; // Clone para segurança
+        } else {
+          // Novo usuário ou não encontrado no cache
+          console.log('🆕 Processando usuário:', userData.username);
+          
+          user = {
+            // CORREÇÃO FINAL: SEMPRE mostrar o nome real do remetente, NUNCA "You"
+            name: userData.username || 'Unknown User', // Nome real diretamente do Slack
+            avatar: userData.user_image || `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.username || 'U')}&background=random`,
+            id: uniqueId // ID único para agrupamento correto
+          };
+          
+          // Armazenar no cache com o ID composto
+          userCache[uniqueId] = {...user};
+          console.log('💾 Novo usuário salvo com identificador único:', uniqueId);
+        }
       } else {
-        // Se não temos dados do usuário, usar fallback
-        const randomProfile = userProfiles[Math.floor(Math.random() * userProfiles.length)];
-        user = {
-          name: randomProfile.name,
-          avatar: randomProfile.avatar,
-          id: `random-${Date.now()}` // Gerar ID aleatório para que cada mensagem seja tratada como de um usuário diferente
-        };
-        console.log('Usando perfil aleatório para mensagem sem dados de usuário:', user);
-      }
+      // Se não temos dados do usuário, usar fallback
+      const randomProfile = userProfiles[Math.floor(Math.random() * userProfiles.length)];
+      user = {
+        name: randomProfile.name,
+        avatar: randomProfile.avatar,
+        id: `random-${Date.now()}` // Gerar ID aleatório para que cada mensagem seja tratada como de um usuário diferente
+      };
+      console.log('Usando perfil aleatório para mensagem sem dados de usuário:', user);
+    }
       
-      // Verificar se é uma mensagem sequencial do mesmo remetente usando o ID do usuário
-      // O ID é muito mais confiável que o nome para diferenciar remetentes
+      // Identificar messagems sequenciais do mesmo remetente EXCLUSIVAMENTE pelo ID
+      // Se dois IDs de usuário forem exatamente iguais, são mensagens sequenciais do mesmo remetente
       const isFollowUp = {
-        original: user.id && lastSender.originalId === user.id,
-        translated: user.id && lastSender.translatedId === user.id
+        original: Boolean(user.id && lastSender.originalId && user.id === lastSender.originalId),
+        translated: Boolean(user.id && lastSender.translatedId && user.id === lastSender.translatedId)
       };
       
-      console.log(`Mensagem de ${user.name} (ID: ${user.id}): é follow-up? ${isFollowUp.original}`);
-      
-      // Atualizar o último remetente com nome E ID
-      lastSender.originalId = user.id;
-      lastSender.translatedId = user.id;
-      lastSender.originalName = user.name;
-      lastSender.translatedName = user.name;
+      console.log(`⚠️ AGRUPAMENTO: Mensagem de ${user.name}:`);
+      console.log(`⚠️   - ID atual: '${user.id || 'vazio'}'`);
+      console.log(`⚠️   - Último ID: '${lastSender.originalId || 'vazio'}'`); 
+      console.log(`⚠️   - É sequencial? ${isFollowUp.original ? '✅ SIM' : '❌ NÃO'}`);      
+
+      // Atualizar o último remetente com o ID
+      if (user.id) {
+        lastSender.originalId = user.id;
+        lastSender.translatedId = user.id;
+        lastSender.original = user.name;
+        lastSender.translated = user.name;
+        console.log(`ℹ️ Rastreamento atualizado: ${user.name} (ID: ${user.id})`);
+      } else {
+        console.warn('⚠️ ID de usuário ausente, agrupamento pode ser inconsistente');
+      }
 
       // Formatar o timestamp
       const timeStr = formatTimestamp(timestamp);
@@ -225,73 +345,58 @@
       transList.scrollTop = transList.scrollHeight;
     }
     
-    function loadInitialMessages() {
+    async function loadInitialMessages() {
       console.log('Carregando mensagens iniciais...');
-      fetch('/messages')
-        .then(response => response.json())
-        .then(messages => {
-          console.log('Mensagens carregadas:', messages);
-          
-          // Limpar mensagens existentes
-          origList.innerHTML = '';
-          transList.innerHTML = '';
-          
-          // Resetar o tracking do último remetente
-          lastSender = {
-            originalId: null,
-            translatedId: null,
-            originalName: null,
-            translatedName: null
-          };
-          
-          // Processar mensagens com seus respectivos usuários e timestamps
-          messages.forEach((msg) => {
-            console.log('Processando mensagem carregada:', msg);
-            
-            // Manter os dados de usuário exatamente como são recebidos do servidor
-            // para garantir que o addMessage possa processá-los corretamente
-            // NÃO criar um novo objeto com diferentes nomes de propriedades
-            
-            // Usar diretamente o objeto msg, que já contém username e user_image
-            const userData = msg;
-            
-            // Verificar o conteúdo para fins de debug
-            console.log('Mensagem original:', msg);
-            console.log('Username recebido do servidor:', msg.username);
-            console.log('User image recebido do servidor:', msg.user_image);
-            
-            // Gerar avatar com iniciais apenas se não houver imagem de usuário
-            if (!msg.user_image && msg.username) {
-              msg.user_image = `https://ui-avatars.com/api/?name=${encodeURIComponent(msg.username)}&background=random`;
-            }
-            
-            // Usar nome genérico apenas se não houver username
-            if (!msg.username) {
-              if (msg.original && msg.original.match(/^(.+?):\s*(.+)$/)) {
-                msg.username = msg.original.match(/^(.+?):\s*(.+)$/)[1];
-              } else {
-                msg.username = "Usuário";
-              }
-            }
-            
-            // Verificar se a mensagem foi enviada pelo usuário atual usando o flag sent_by_me do backend
-            // Importante: usamos sent_by_me e não sent_by_user para manter consistência com o backend
-            console.log('Verificando se mensagem é do usuário atual:', msg.sent_by_me);
-            
-            // Adicionar a mensagem com as informações reais do usuário
-            // Nota: Removemos o parâmetro sentByUser que não é mais necessário pois estamos usando sent_by_me diretamente do userData
-            addMessage(
-              msg.original, 
-              msg.translation, 
-              false, // Valor não será mais usado, pois userData.sent_by_me terá prioridade
-              msg.timestamp * 1000, // Converter timestamp para milissegundos
-              userData
-            );
+      await ensureCurrentUserInfo();
+      
+      if (!myUserInfo.userId) {
+        console.error('❌ ERRO GRAVE: Não foi possível obter seu ID de usuário. A identificação de mensagens pode estar incorreta!');
+      } else {
+        console.log('✅ ID DO USUÁRIO CONFIRMADO antes de processar mensagens:', myUserInfo.userId);
+      }
+      
+      // Resetar o estado da UI e buscar todas as mensagens
+      document.getElementById('original-messages').innerHTML = '';
+      document.getElementById('translated-messages').innerHTML = '';
+      
+      // Resetar o rastreamento do último remetente para evitar agrupamento incorreto
+      lastSender = {
+        originalId: null,
+        translatedId: null,
+        original: null,
+        translated: null
+      };
+      
+      try {
+        const response = await fetch('/messages');
+        const messages = await response.json();
+        console.log('Mensagens carregadas:', messages);
+        
+        // Processar cada mensagem individualmente, garantindo que temos o ID do usuário correto
+        for (const msg of messages) {
+          console.log('❗ Processando mensagem com informações de usuário:', {
+            user_id: msg.user_id || 'desconhecido',
+            username: msg.username,
+            seu_id: myUserInfo.userId || 'não carregado'
           });
-        })
-        .catch(error => {
-          console.error('Erro ao carregar mensagens:', error);
-        });
+          
+          // Adicionar a mensagem com as informações reais do usuário
+          addMessage(
+            msg.original, 
+            msg.translation, 
+            false, // Valor ignorado - a comparação é feita com IDs
+            msg.timestamp * 1000, // Converter para milissegundos
+            {
+              username: msg.username, 
+              user_image: msg.user_image,
+              user_id: msg.user_id,
+              // Não usamos sent_by_me, comparamos IDs diretamente
+            }
+          );
+        }
+      } catch (error) {
+        console.error('Erro ao carregar mensagens:', error);
+      }
     }
     
     window.addEventListener('load', async function() {
@@ -373,6 +478,69 @@
     
     let currentTranslation = null;
     
+    // Função para remover mensagens de rascunho
+    function removeDraftMessages() {
+      const draftMessages = document.querySelectorAll('.message.draft');
+      draftMessages.forEach(msg => msg.remove());
+    }
+    
+    // Função para adicionar uma mensagem de rascunho (em processo de envio)
+    function addDraftMessage(message, translation) {
+      // Remover qualquer mensagem de rascunho anterior
+      removeDraftMessages();
+      
+      // Obter seu nome e avatar se disponíveis, ou usar valores padrão
+      const username = myUserInfo.name || (userCache[myUserInfo.userId]?.name) || 'Você';
+      const avatar = myUserInfo.avatar || (userCache[myUserInfo.userId]?.avatar) || 'https://ui-avatars.com/api/?name=You';
+      
+      // Criar uma mensagem de rascunho nas duas colunas
+      const msgElements = [
+        { container: document.getElementById('original-messages'), content: message },
+        { container: document.getElementById('translated-messages'), content: translation || 'Traduzindo...' }
+      ];
+      
+      msgElements.forEach(({container, content}) => {
+        const msgDiv = document.createElement('div');
+        msgDiv.className = 'message draft';
+        
+        // Criar cabeçalho com autor e timestamp
+        const msgHeader = document.createElement('div');
+        msgHeader.className = 'message-header';
+        
+        // Avatar do usuário
+        const avatarImg = document.createElement('img');
+        avatarImg.src = avatar;
+        avatarImg.className = 'user-avatar';
+        avatarImg.alt = username;
+        
+        // Nome do usuário + indicação que está sendo enviada
+        const authorSpan = document.createElement('span');
+        authorSpan.className = 'message-author';
+        authorSpan.textContent = username + ' (enviando...)';
+        
+        // Timestamp atual
+        const timeSpan = document.createElement('span');
+        timeSpan.className = 'message-time';
+        timeSpan.textContent = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+        
+        // Conteúdo da mensagem
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'message-content';
+        contentDiv.textContent = content;
+        
+        // Montar mensagem
+        msgHeader.appendChild(avatarImg);
+        msgHeader.appendChild(authorSpan);
+        msgHeader.appendChild(timeSpan);
+        msgDiv.appendChild(msgHeader);
+        msgDiv.appendChild(contentDiv);
+        
+        // Adicionar ao container
+        container.appendChild(msgDiv);
+        container.scrollTop = container.scrollHeight;
+      });
+    }
+    
     // Função para traduzir o texto
     translateButton.addEventListener('click', function() {
       const messageText = messageInput.value.trim();
@@ -382,6 +550,9 @@
         translationPreview.style.color = 'red';
         return;
       }
+      
+      // Exibir mensagem sendo enviada
+      addDraftMessage(messageText, 'Traduzindo...');
       
       translationPreview.textContent = 'Traduzindo...';
       translationPreview.style.color = '';
@@ -401,6 +572,9 @@
           translationPreview.textContent = data.translation;
           currentTranslation = data.translation;
           sendButton.disabled = false;
+          
+          // Atualizar a mensagem de rascunho com a tradução
+          addDraftMessage(messageText, data.translation);
         } else {
           translationPreview.textContent = 'Erro ao traduzir: ' + (data.error || 'Erro desconhecido');
           translationPreview.style.color = 'red';
@@ -412,6 +586,9 @@
         translationPreview.textContent = 'Erro ao traduzir. Tente novamente.';
         translationPreview.style.color = 'red';
         sendButton.disabled = true;
+        
+        // Remover mensagem de rascunho em caso de erro
+        removeDraftMessages();
       });
     });
     
@@ -438,8 +615,8 @@
       .then(response => response.json())
       .then(data => {
         if (data.success) {
-          // NÃO adicionar a mensagem localmente - vamos apenas esperar o backend atualizar
-          // O backend já adicionou a mensagem com os detalhes corretos do usuário do Slack
+          // Remover a mensagem de rascunho e esperar a atualização do servidor
+          removeDraftMessages();
           console.log('Mensagem enviada com sucesso, aguardando atualização do servidor...');
           
           // Limpar o formulário após envio bem-sucedido

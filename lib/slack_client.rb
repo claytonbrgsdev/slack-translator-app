@@ -28,9 +28,17 @@ module SlackClient
     @logger.info "Configurando monitoramento para canal #{ENV['SLACK_CHANNEL_ID']}"
     
     begin
+      # MELHORADO: Obter e armazenar o ID do usuário atual de forma mais robusta
       auth_test = @web_client.auth_test
-      @current_user_id = auth_test.user_id # Armazenar o ID do usuário atual
-      @logger.info "Conectado ao Slack como: #{auth_test.user} (#{auth_test.team}) ID: #{@current_user_id}"
+      
+      if auth_test && auth_test.user_id && !auth_test.user_id.to_s.strip.empty?
+        @current_user_id = auth_test.user_id.to_s.strip
+        @logger.info "ID DO USUÁRIO AUTENTICADO SALVO COM SUCESSO: '#{@current_user_id}'"
+        @logger.info "Conectado ao Slack como: #{auth_test.user} (#{auth_test.team})"
+      else
+        @logger.error "FALHA CRÍTICA: Não foi possível obter o ID do usuário autenticado!"
+        @current_user_id = nil
+      end
       
       @last_timestamp = Time.now.to_i - 300 # Últimos 5 minutos
       Thread.new do
@@ -89,29 +97,57 @@ module SlackClient
   
   def self.is_current_user?(user_id)
     # Verificar se o ID do usuário fornecido corresponde ao usuário atual (você)
-    # Logs detalhados para depurar o problema de identificação incorreta
+    # Método aprimorado com verificações de segurança adicionais
     @logger ||= Logger.new(STDOUT)
     
-    if !@current_user_id
-      @logger.warn "PROBLEMA: current_user_id não está definido. Nenhuma mensagem pode ser do usuário atual."
+    # Verificações de segurança para evitar falsos positivos
+    if !@current_user_id || @current_user_id.to_s.strip.empty?
+      @logger.error "ERRO CRÍTICO: current_user_id não está definido ou é vazio: '#{@current_user_id || "nil"}'"
       return false
     end
     
-    if !user_id
-      @logger.warn "PROBLEMA: user_id não fornecido para comparar com current_user_id."
+    if !user_id || user_id.to_s.strip.empty?
+      @logger.error "ERRO CRÍTICO: user_id não fornecido ou é vazio: '#{user_id || "nil"}'"
       return false
     end
     
-    result = @current_user_id.to_s.strip == user_id.to_s.strip
+    # Comparação direta e explícita para evitar diferenciação por tipos
+    current = @current_user_id.to_s.strip
+    provided = user_id.to_s.strip
+    result = (current == provided)
     
-    @logger.info "COMPARAÇÃO DE IDs: current_user_id='#{@current_user_id.to_s}' vs user_id='#{user_id.to_s}' => #{result ? 'MATCH' : 'DIFFERENT'}"
+    @logger.info "COMPARAÇÃO DE IDs (RIGOROSA): '#{current}' vs '#{provided}' => #{result ? 'MATCH (SUA MENSAGEM)' : 'DIFERENTE (OUTRO USUÁRIO)'}"
     
-    # Garante que identificamos corretamente o usuário atual
+    # IMPORTANTE: depuração avanzada para identificação de problemas
+    if !result
+      hex_comparison = "current_id hex: #{current.unpack('H*').first} | provided_id hex: #{provided.unpack('H*').first}"
+      @logger.debug "Detalhes da comparação de IDs: #{hex_comparison}"
+      @logger.debug "Tamanhos: current_id length: #{current.length} | provided_id length: #{provided.length}"
+    end
+    
     return result
   end
 
   def self.get_current_user_id
-    # Retornar o ID do usuário atual (você)
+    # APRIMORADO: Verificação robusta do ID do usuário atual (você)
+    if !@current_user_id || @current_user_id.to_s.strip.empty?
+      @logger.error "ERRO CRÍTICO: ID do usuário atual não está definido ou é inválido! Reconectando ao Slack..."
+      
+      # Tentar obter novamente o ID via auth_test
+      begin
+        auth_test = @web_client.auth_test
+        if auth_test && auth_test.user_id
+          @current_user_id = auth_test.user_id.to_s.strip
+          @logger.info "RECONEXÃO BEM-SUCEDIDA: ID do usuário atual obtido: #{@current_user_id}"
+        else
+          @logger.error "FALHA NA RECONEXÃO: Não foi possível recuperar o ID do usuário"
+        end
+      rescue => e
+        @logger.error "ERRO NA RECONEXÃO: #{e.message}"
+      end
+    end
+    
+    @logger.info "get_current_user_id retornando: '#{@current_user_id || 'nil'}'"
     return @current_user_id
   end
 
@@ -164,6 +200,13 @@ module SlackClient
     user_info = nil
     username = nil
     user_image = nil
+    
+    # Verificar se temos um ID de usuário válido
+    if user_id.nil? || user_id.to_s.strip.empty?
+      @logger.warn "ID de usuário ausente ou inválido para mensagem: '#{original[0..30]}...'"
+    else
+      @logger.info "Processando mensagem do usuário com ID: '#{user_id}'"
+    end
     
     # Se a mensagem estiver no formato "Username: message", extrair o username e a mensagem
     if original =~ /^(.+?):\s*(.+)$/ && !user_id
@@ -241,22 +284,44 @@ module SlackClient
     end
     
     begin
-      # Verificar se a mensagem foi enviada pelo usuário atual (você)
-    is_current_user = is_current_user?(user_id)
-    @logger.info "Verificando se mensagem é do usuário atual: #{is_current_user} (user_id: #{user_id}, current_user_id: #{@current_user_id})"
-    
-    # Criar a mensagem com todos os dados relevantes
-    message = { 
-      original: original, 
-      translation: translation, 
-      timestamp: Time.now.to_i,
-      user_id: user_id,
-      username: username,
-      user_image: user_image,
-      sent_by_me: is_current_user # Adicionar flag para identificar mensagens do usuário atual
-    }
+      # CORREÇÃO FINAL: Criar um ID único por remetente para resolver o problema de IDs duplicados
+      # Neste ponto, temos o nome de usuário real (username) obtido do Slack
       
-      @logger.info "Enviando mensagem com informações de usuário: ID=#{user_id}, Nome=#{username}, Tem imagem=#{!user_image.nil?}"
+      # Verificar se temos informações mínimas para identificar o remetente
+      if !username || username.strip.empty?
+        @logger.error "ERRO: Nome de usuário ausente, não é possível criar ID único!"
+        # Usar o timestamp como fallback para ID único se não temos nome de usuário
+        unique_id = "unknown_#{Time.now.to_i}_#{rand(1000)}"
+      else
+        # Criar um ID único composto (username + timestamp) que seja diferente para cada remetente
+        # Isso resolve o problema fundamental de todos terem o mesmo ID
+        unique_id = "#{username.gsub(/\s+/, '_')}_#{Time.now.to_i}_#{rand(100)}"
+        @logger.info "SOLUÇÃO: Criando ID único para: '#{username}': #{unique_id}"
+      end
+      
+      # Ainda manter o user_id original para registro
+      original_user_id = user_id
+      
+      # Log para debugging
+      @logger.info "DADOS FINAIS DO REMETENTE: Nome='#{username}', ID Original='#{original_user_id}', ID Único='#{unique_id}'"
+      
+      # Verificar se é o usuário atual (botou ou usuário autenticado)
+      # Obs: Isso não afeta mais a interface, é apenas para registro
+      is_current_user = original_user_id && @current_user_id && original_user_id.to_s.strip == @current_user_id.to_s.strip
+      
+      # Criar a mensagem com dados corrigidos
+      message = { 
+        original: original, 
+        translation: translation, 
+        timestamp: Time.now.to_i,
+        user_id: unique_id, # CORREÇÃO CRUCIAL: Usar ID Único para cada remetente
+        username: username,
+        user_image: user_image,
+        original_user_id: original_user_id, # Manter o ID original para referência
+        sent_by_me: is_current_user # Mantido apenas para compatibilidade
+      }
+      
+      @logger.info "Enviando mensagem final com: ID Único=#{unique_id}, Nome=#{username}, ID Original=#{original_user_id}"
       
       send_to_webapp(message)
     rescue => e

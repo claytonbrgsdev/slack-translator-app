@@ -74,7 +74,7 @@ module OllamaClient
       
       payload = { 
         model: model || 'llama3.1:8b', 
-        prompt: "Translate this into Brazilian Portuguese:\n\n#{text}", 
+        prompt: "Translate the following English text to Brazilian Portuguese. Return ONLY the direct translation without ANY additional comments, explanations, introductory phrases, or cultural notes. The output should contain only the translated content and nothing else:\n\n#{text}", 
         stream: false 
       }
       
@@ -110,7 +110,7 @@ module OllamaClient
       
       payload = { 
         model: model || 'llama3.1:8b', 
-        prompt: "Translate this into English:\n\n#{text}", 
+        prompt: "Translate the following Portuguese text to English. Return ONLY the direct translation without ANY additional comments, explanations, introductory phrases, or cultural notes. The output should contain only the translated content and nothing else:\n\n#{text}", 
         stream: false 
       }
       

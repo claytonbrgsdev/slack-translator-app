@@ -19,11 +19,8 @@ set :public_folder, File.expand_path('../public', __FILE__)
 set :views, File.expand_path('../views', __FILE__)
 set :logging, true
 
-$messages = [
-  {original: "Hello world", translation: "Olá mundo", timestamp: Time.now.to_i - 120},
-  {original: "This is a test message", translation: "Esta é uma mensagem de teste", timestamp: Time.now.to_i - 60},
-  {original: "Welcome to SlackTranslator", translation: "Bem-vindo ao SlackTranslator", timestamp: Time.now.to_i}
-]
+# Iniciar com uma lista vazia de mensagens
+$messages = []
 
 configure do
   $logger = Logger.new(STDOUT)
@@ -48,15 +45,36 @@ get '/messages' do
 end
 
 get '/test-message' do
-  original = "This is a test message! #{Time.now.strftime('%H:%M:%S')}"
-  translation = "Esta é uma mensagem de teste! #{Time.now.strftime('%H:%M:%S')}"
+  $logger.info "Recebendo requisição para enviar mensagem de teste"
   
-  $messages << {original: original, translation: translation, timestamp: Time.now.to_i}
-  
-  $messages = $messages.last(20) if $messages.size > 20
-  
-  content_type :json
-  { status: 'ok', message: 'Test message sent', original: original, translation: translation }.to_json
+  if $slack_available
+    # Usar o método test_message do SlackClient que agora obtém
+    # informações reais do usuário via API do Slack
+    message_text = "This is a test message! #{Time.now.strftime('%H:%M:%S')}"
+    success = SlackClient.test_message(message_text)
+    
+    $logger.info "Mensagem de teste processada via SlackClient: #{success ? 'Sucesso' : 'Falha'}"
+    
+    # A mensagem já foi adicionada à lista pelo SlackClient.process_message
+    content_type :json
+    { status: success ? 'ok' : 'error', 
+      message: 'Test message sent', 
+      original: message_text, 
+      translation: "Esta é uma mensagem de teste! #{Time.now.strftime('%H:%M:%S')}" # Apenas para compatibilidade com o frontend
+    }.to_json
+  else
+    $logger.warn "Tentativa de enviar mensagem de teste, mas Slack Client não está disponível"
+    
+    # Fallback se o Slack não estiver disponível
+    original = "This is a test message! #{Time.now.strftime('%H:%M:%S')}"
+    translation = "Esta é uma mensagem de teste! #{Time.now.strftime('%H:%M:%S')}"
+    
+    $messages << {original: original, translation: translation, timestamp: Time.now.to_i, username: "Test User"}
+    $messages = $messages.last(20) if $messages.size > 20
+    
+    content_type :json
+    { status: 'ok', message: 'Test message sent (fallback)', original: original, translation: translation }.to_json
+  end
 end
 
 get '/sse' do
@@ -93,11 +111,21 @@ post '/add-message' do
     
     payload['timestamp'] ||= Time.now.to_i
     
-    $messages << {
+    # Guardar todos os campos relevantes do payload, especialmente username e user_image
+    message_data = {
       original: payload['original'],
       translation: payload['translation'],
       timestamp: payload['timestamp']
     }
+    
+    # Adicionar explicitamente os dados do usuário se estiverem presentes
+    message_data[:username] = payload['username'] if payload['username']
+    message_data[:user_image] = payload['user_image'] if payload['user_image']
+    message_data[:user_id] = payload['user_id'] if payload['user_id']
+    
+    $logger.info "Adicionando mensagem com username=#{payload['username'] || 'nil'} e user_image=#{payload['user_image'] ? 'presente' : 'ausente'}"
+    
+    $messages << message_data
     
     $messages = $messages.last(50) if $messages.size > 50
     

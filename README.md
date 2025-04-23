@@ -40,7 +40,7 @@ Para obter estas credenciais, você precisa criar uma aplicação Slack em https
 
 3. **SLACK_API_TOKEN**: Token de autenticação do Bot
    * Disponível em: _OAuth & Permissions_ > _Bot User OAuth Token_
-   * Certifique-se de que seu bot tenha as permissões: `channels:history`, `channels:read`, `chat:write`
+   * Certifique-se de que seu bot tenha as permissões: `channels:history`, `channels:read`, `chat:write`, `users.profile:read`
 
 4. **SLACK_USER_TOKEN**: Token de usuário para enviar mensagens como você mesmo
    * Disponível em: _OAuth & Permissions_ > _User OAuth Token_
@@ -113,7 +113,7 @@ To obtain these credentials, you need to create a Slack application at https://a
 
 3. **SLACK_API_TOKEN**: Bot authentication token
    * Available at: _OAuth & Permissions_ > _Bot User OAuth Token_
-   * Make sure your bot has the permissions: `channels:history`, `channels:read`, `chat:write`
+   * Make sure your bot has the permissions: `channels:history`, `channels:read`, `chat:write`, `users.profile:read`
 
 4. **SLACK_USER_TOKEN**: User token to send messages as yourself
    * Available at: _OAuth & Permissions_ > _User OAuth Token_

@@ -9,11 +9,11 @@
   <h1>SlackTranslator</h1>
   <div id="container">
     <div id="originals" class="column">
-      <h2>Original (EN)</h2>
+      <h2>Original Messages</h2>
       <ul id="original-messages"></ul>
     </div>
     <div id="translations" class="column">
-      <h2>Traduções (PT)</h2>
+      <h2>Translated Messages</h2>
       <ul id="translated-messages"></ul>
     </div>
   </div>
@@ -24,17 +24,141 @@
     const origList = document.getElementById('original-messages');
     const transList = document.getElementById('translated-messages');
     
-    function addMessage(original, translation) {
+    // Array de perfis aleatórios para simular diferentes usuários
+    const userProfiles = [
+      { name: 'Alex Wong', avatar: 'https://i.pravatar.cc/100?img=3' },
+      { name: 'John Smith', avatar: 'https://i.pravatar.cc/100?img=5' },
+      { name: 'Sarah Johnson', avatar: 'https://i.pravatar.cc/100?img=9' },
+      { name: 'Maria Garcia', avatar: 'https://i.pravatar.cc/100?img=10' }
+    ];
+
+    function formatTimestamp(timestamp) {
+      if (!timestamp) timestamp = Date.now();
+      
+      const date = new Date(timestamp);
+      const now = new Date();
+      const yesterdayDate = new Date(now);
+      yesterdayDate.setDate(now.getDate() - 1);
+      
+      // Formato para hora - 1:15 PM
+      const timeStr = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+      
+      // Se for hoje ou ontem, mostrar isso em vez da data
+      if (date.toDateString() === now.toDateString()) {
+        return timeStr;
+      } else if (date.toDateString() === yesterdayDate.toDateString()) {
+        return 'yesterday ' + timeStr;
+      } else {
+        // Se for mais antigo, mostrar data abreviada
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + timeStr;
+      }
+    }
+    
+    // Acompanhamento da última pessoa a enviar mensagem para criação de mensagens sequenciais
+    let lastSender = { original: null, translated: null };
+    
+    function addMessage(original, translation, sentByUser = false, timestamp = Date.now(), userData = null) {
       console.log('Adicionando nova mensagem:', original);
       
-      const origItem = document.createElement('li');
-      origItem.textContent = original;
-      origList.appendChild(origItem);
+      // Determinar usuário para a mensagem
+      let user;
+      console.log('userData recebido:', userData);
       
-      const transItem = document.createElement('li');
-      transItem.textContent = translation;
+      if (sentByUser) {
+        user = { name: 'You', avatar: 'https://i.pravatar.cc/100?img=7' };
+      } else if (userData) {
+        // Extrair corretamente os campos enviados pelo servidor
+        // Usar diretamente os nomes de campos como são enviados pelo backend (username e user_image)
+        user = {
+          name: userData.username || 'Unknown User',
+          avatar: userData.user_image
+        };
+        console.log('Dados de usuário originais:', userData);
+        console.log('Usando dados de usuário fornecidos:', user);
+        console.log('Nome do usuário usado:', user.name);
+      } else {
+        // Se não temos dados do usuário, usar fallback
+        user = userProfiles[Math.floor(Math.random() * userProfiles.length)];
+        console.log('Usando perfil aleatório para mensagem sem dados de usuário:', user);
+      }
+      
+      // Verificar se é uma mensagem sequencial (mesmo remetente)
+      const isFollowUp = {
+        original: lastSender.original === user.name,
+        translated: lastSender.translated === user.name
+      };
+      
+      // Atualizar o último remetente
+      lastSender.original = user.name;
+      lastSender.translated = user.name;
+
+      // Formatar o timestamp
+      const timeStr = formatTimestamp(timestamp);
+      
+      // Verificar se a mensagem contém o nome do usuário no formato "Username: message"
+      // e remover a repetição se existir
+      let cleanOriginal = original;
+      let cleanTranslation = translation;
+      
+      // Padrão para detectar "Nome: mensagem"
+      const usernamePattern = new RegExp(`^${user.name}:\s*(.+)$`);
+      
+      // Remover o prefixo de nome da mensagem original
+      const originalMatch = cleanOriginal.match(usernamePattern);
+      if (originalMatch) {
+        cleanOriginal = originalMatch[1];
+      }
+      
+      // Remover o prefixo de nome da mensagem traduzida
+      const translationMatch = cleanTranslation.match(usernamePattern);
+      if (translationMatch) {
+        cleanTranslation = translationMatch[1];
+      }
+      
+      // Criar elemento para avatar com fallback para iniciais se a imagem falhar
+      const avatarStyle = user.avatar ? 
+        `background-image: url('${user.avatar}')` : 
+        `background-color: #4A154B; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold;`;
+      
+      const avatarContent = user.avatar ? '' : `<span>${(user.name || 'User').split(' ').map(part => part[0]).join('').substring(0, 2).toUpperCase()}</span>`;
+      
+      // Criar elemento para mensagem original no estilo Slack
+      const origItem = document.createElement('div');
+      origItem.className = 'message' + (sentByUser ? ' user-message' : '') + (isFollowUp.original ? ' follow-up' : '');
+      origItem.innerHTML = `
+        <div class="avatar" style="${avatarStyle}">${avatarContent}</div>
+        <div class="message-content">
+          <div class="message-header">
+            <span class="username">${user.name}</span>
+            <span class="timestamp">${timeStr}</span>
+          </div>
+          <div class="message-text">${cleanOriginal}</div>
+        </div>
+      `;
+      
+      // Criar elemento para mensagem traduzida no estilo Slack
+      const transItem = document.createElement('div');
+      transItem.className = 'message' + (sentByUser ? ' user-message' : '') + (isFollowUp.translated ? ' follow-up' : '');
+      transItem.innerHTML = `
+        <div class="avatar" style="${avatarStyle}">${avatarContent}</div>
+        <div class="message-content">
+          <div class="message-header">
+            <span class="username">${user.name}</span>
+            <span class="timestamp">${timeStr}</span>
+          </div>
+          <div class="message-text">${cleanTranslation}</div>
+        </div>
+      `;
+      
+      // Adicionar classes para animação de destaque para novas mensagens
+      origItem.classList.add('new-message');
+      transItem.classList.add('new-message');
+      
+      // Adicionar ao DOM
+      origList.appendChild(origItem);
       transList.appendChild(transItem);
       
+      // Scroll para mostrar as mensagens mais recentes
       origList.scrollTop = origList.scrollHeight;
       transList.scrollTop = transList.scrollHeight;
     }
@@ -46,11 +170,54 @@
         .then(messages => {
           console.log('Mensagens carregadas:', messages);
           
+          // Limpar mensagens existentes
           origList.innerHTML = '';
           transList.innerHTML = '';
           
-          messages.forEach(msg => {
-            addMessage(msg.original, msg.translation);
+          // Resetar o tracking do último remetente
+          lastSender = { original: null, translated: null };
+          
+          // Processar mensagens com seus respectivos usuários e timestamps
+          messages.forEach((msg) => {
+            console.log('Processando mensagem carregada:', msg);
+            
+            // Manter os dados de usuário exatamente como são recebidos do servidor
+            // para garantir que o addMessage possa processá-los corretamente
+            // NÃO criar um novo objeto com diferentes nomes de propriedades
+            
+            // Usar diretamente o objeto msg, que já contém username e user_image
+            const userData = msg;
+            
+            // Verificar o conteúdo para fins de debug
+            console.log('Mensagem original:', msg);
+            console.log('Username recebido do servidor:', msg.username);
+            console.log('User image recebido do servidor:', msg.user_image);
+            
+            // Gerar avatar com iniciais apenas se não houver imagem de usuário
+            if (!msg.user_image && msg.username) {
+              msg.user_image = `https://ui-avatars.com/api/?name=${encodeURIComponent(msg.username)}&background=random`;
+            }
+            
+            // Usar nome genérico apenas se não houver username
+            if (!msg.username) {
+              if (msg.original && msg.original.match(/^(.+?):\s*(.+)$/)) {
+                msg.username = msg.original.match(/^(.+?):\s*(.+)$/)[1];
+              } else {
+                msg.username = "Usuário";
+              }
+            }
+            
+            // Determinar se a mensagem foi enviada pelo usuário atual
+            const sentByUser = msg.sent_by_user || false;
+            
+            // Adicionar a mensagem com as informações reais do usuário
+            addMessage(
+              msg.original, 
+              msg.translation, 
+              sentByUser,
+              msg.timestamp * 1000, // Converter timestamp para milissegundos
+              userData
+            );
           });
         })
         .catch(error => {
@@ -106,6 +273,12 @@
         .then(data => {
           console.log('Teste enviado com sucesso:', data);
           statusEl.textContent = 'Mensagem de teste enviada!';
+          
+          // Adicionar a mensagem de teste usando as informações reais do usuário
+          // Não marcar como enviado pelo usuário (false)
+          // Isso permite que os dados do usuário sejam exibidos corretamente
+          console.log('Dados recebidos da API para mensagem de teste:', data);
+          addMessage(data.original, data.translation, false, Date.now(), data);
           
           setTimeout(() => {
             statusEl.style.display = 'none';
@@ -191,6 +364,9 @@
       .then(response => response.json())
       .then(data => {
         if (data.success) {
+          // Adicionar a mensagem aos balões de chat como enviada pelo usuário
+          addMessage(messageInput.value.trim(), currentTranslation, true);
+          
           // Limpar o formulário após envio bem-sucedido
           messageInput.value = '';
           translationPreview.textContent = 'Mensagem enviada com sucesso!';

@@ -1,29 +1,129 @@
 body {
-  font-family: Arial, sans-serif;
+  font-family: 'Lato', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   margin: 0;
   padding: 20px;
   line-height: 1.6;
+  background-color: #f5f5f5;
+  color: #1d1c1d;
 }
 
-.container {
+#container {
   display: flex;
   gap: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 .column {
   flex: 1;
   border: 1px solid #ddd;
   padding: 15px;
-  border-radius: 5px;
-  background-color: #f9f9f9;
+  border-radius: 8px;
+  background-color: #fff;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  height: 600px;
+  overflow-y: auto;
 }
 
+/* Estilo para o cabeçalho/título da coluna */
+.column h2 {
+  font-size: 18px;
+  font-weight: 700;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e8e8e8;
+  margin-top: 0;
+  margin-bottom: 16px;
+  color: #1d1c1d;
+}
+
+/* Remover bullets e padding das listas */
+ul {
+  list-style-type: none;
+  padding: 0;
+  margin: 0;
+}
+
+/* Estilo base para mensagens no estilo Slack */
 .message {
-  margin-bottom: 10px;
-  padding: 10px;
-  background-color: #fff;
-  border-radius: 5px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  display: flex;
+  margin-bottom: 8px;
+  padding: 8px 4px;
+  animation: fadeIn 0.3s;
+  border-radius: 4px;
+  position: relative;
+}
+
+.message:hover {
+  background-color: #f8f8f8;
+}
+
+/* Avatar */
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 4px;
+  margin-right: 8px;
+  flex-shrink: 0;
+  background-size: cover;
+  background-position: center;
+}
+
+/* Conteúdo da mensagem */
+.message-content {
+  flex-grow: 1;
+  min-width: 0;
+}
+
+/* Cabeçalho da mensagem com nome do usuário e timestamp */
+.message-header {
+  display: flex;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+
+.username {
+  font-weight: 900;
+  font-size: 15px;
+  margin-right: 8px;
+  color: #1d1c1d;
+}
+
+.timestamp {
+  font-size: 12px;
+  color: #616061;
+  font-weight: 400;
+}
+
+/* Texto da mensagem */
+.message-text {
+  word-wrap: break-word;
+  word-break: break-word;
+  white-space: pre-wrap;
+  color: #1d1c1d;
+  font-size: 15px;
+}
+
+/* Estilo para mensagens enviadas pelo usuário "You" */
+.message.user-message {
+  background-color: rgba(29, 155, 209, 0.05);
+}
+
+.message.user-message:hover {
+  background-color: rgba(29, 155, 209, 0.1);
+}
+
+/* Estilo para mensagens da mesma pessoa em sequência (sem avatar repetido) */
+.message.follow-up {
+  margin-top: -4px;
+}
+
+.follow-up .avatar {
+  visibility: hidden;
+}
+
+.follow-up .username,
+.follow-up .timestamp {
+  display: none;
 }
 
 #reply-form {
@@ -54,4 +154,47 @@ button:hover {
 
 h1, h2 {
   color: #333;
+  text-align: center;
+}
+
+/* Animação de fade-in para mensagens */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Estilo para o cabeçalho de cada coluna */
+.column h2 {
+  margin-top: 0;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #eee;
+  font-size: 1.2em;
+}
+
+/* Animação para novas mensagens */
+@keyframes new-message {
+  from { background-color: rgba(255, 247, 209, 0.4); }
+  to { background-color: transparent; }
+}
+
+.new-message {
+  animation: new-message 2s ease-out;
+}
+
+/* Estilo das linhas de separação de data */
+.date-divider {
+  display: flex;
+  align-items: center;
+  margin: 16px 0;
+  color: #616061;
+  font-size: 12px;
+}
+
+.date-divider:before,
+.date-divider:after {
+  content: '';
+  flex-grow: 1;
+  height: 1px;
+  background-color: #e8e8e8;
+  margin: 0 8px;
 }

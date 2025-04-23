@@ -31,6 +31,13 @@
       { name: 'Sarah Johnson', avatar: 'https://i.pravatar.cc/100?img=9' },
       { name: 'Maria Garcia', avatar: 'https://i.pravatar.cc/100?img=10' }
     ];
+    
+    // Armazenar informações do usuário atual (você) para identificação correta das mensagens
+    let myUserInfo = {
+      userId: null,  // ID do usuário atual (você)
+      name: null,    // Seu nome de usuário
+      avatar: null   // URL do seu avatar
+    };
 
     function formatTimestamp(timestamp) {
       if (!timestamp) timestamp = Date.now();
@@ -64,26 +71,39 @@
       let user;
       console.log('userData recebido:', userData);
       
-      // Verificar se a mensagem foi enviada pelo usuário atual (via flag sent_by_me do backend)
-      if (userData && userData.sent_by_me) {
-        console.log('Mensagem identificada como enviada por você (current user)!');
+      // NOVA ABORDAGEM: Detectamos o usuário atual (você) olhando para o ID do usuário
+      // Se você já enviou alguma mensagem marcada como 'sent_by_me', armazenamos seu ID para comparação futura
+      if (userData && userData.user_id && userData.sent_by_me && !myUserInfo.userId) {
+        console.log('Primeira mensagem do usuário atual detectada! Salvando seu ID para referência.');
+        myUserInfo.userId = userData.user_id;
+        myUserInfo.name = userData.username;
+        myUserInfo.avatar = userData.user_image;
+        console.log('Seu ID de usuário:', myUserInfo.userId);
+      }
+      
+      // Verificar se a mensagem é realmente sua comparando IDs
+      const isReallyYou = userData && userData.user_id && 
+                         ((myUserInfo.userId && userData.user_id === myUserInfo.userId) || 
+                          userData.sent_by_me);
+      
+      console.log(`Verificando mensagem - ID: ${userData?.user_id || 'desconhecido'}, Seu ID: ${myUserInfo.userId || 'desconhecido'}, É realmente você? ${isReallyYou}`);
+      
+      if (isReallyYou) {
+        // É realmente uma mensagem sua
+        console.log('Mensagem confirmada como enviada por você!', userData?.user_id);
         user = { 
           name: 'You', 
-          avatar: userData.user_image,
-          id: userData.user_id || 'your-id' // Usar ID do usuário para agrupamento
+          avatar: userData.user_image || myUserInfo.avatar,
+          id: userData.user_id || 'your-id'
         };
       } else if (userData) {
-        // Extrair corretamente os campos enviados pelo servidor
-        // Usar diretamente os nomes de campos como são enviados pelo backend (username e user_image)
+        // Mensagem de outro usuário (não é você)
+        console.log('Mensagem de outro usuário:', userData.username, userData.user_id);
         user = {
           name: userData.username || 'Unknown User',
           avatar: userData.user_image,
-          id: userData.user_id || `user-${Date.now()}` // Usar ID do usuário ou gerar um temporário
+          id: userData.user_id || `user-${Date.now()}`
         };
-        console.log('Dados de usuário originais:', userData);
-        console.log('Usando dados de usuário fornecidos:', user);
-        console.log('Nome do usuário usado:', user.name);
-        console.log('ID do usuário para agrupamento:', user.id);
       } else {
         // Se não temos dados do usuário, usar fallback
         const randomProfile = userProfiles[Math.floor(Math.random() * userProfiles.length)];

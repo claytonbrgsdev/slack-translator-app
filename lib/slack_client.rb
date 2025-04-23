@@ -89,7 +89,25 @@ module SlackClient
   
   def self.is_current_user?(user_id)
     # Verificar se o ID do usuário fornecido corresponde ao usuário atual (você)
-    return @current_user_id && user_id && @current_user_id == user_id
+    # Logs detalhados para depurar o problema de identificação incorreta
+    @logger ||= Logger.new(STDOUT)
+    
+    if !@current_user_id
+      @logger.warn "PROBLEMA: current_user_id não está definido. Nenhuma mensagem pode ser do usuário atual."
+      return false
+    end
+    
+    if !user_id
+      @logger.warn "PROBLEMA: user_id não fornecido para comparar com current_user_id."
+      return false
+    end
+    
+    result = @current_user_id.to_s.strip == user_id.to_s.strip
+    
+    @logger.info "COMPARAÇÃO DE IDs: current_user_id='#{@current_user_id.to_s}' vs user_id='#{user_id.to_s}' => #{result ? 'MATCH' : 'DIFFERENT'}"
+    
+    # Garante que identificamos corretamente o usuário atual
+    return result
   end
 
   def self.get_current_user_id

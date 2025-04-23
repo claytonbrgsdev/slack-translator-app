@@ -115,7 +115,7 @@ end
 # Rota para traduzir de português para inglês (para a funcionalidade de envio)
 post '/translate-to-english' do
   begin
-    content_type :json
+    content_type 'application/json'
     request.body.rewind
     payload = JSON.parse(request.body.read)
     
@@ -139,18 +139,18 @@ post '/translate-to-english' do
       return { error: translation }.to_json
     end
     
-    { translation: translation }.to_json
+    return { translation: translation }.to_json
   rescue => e
     status 500
     $logger.error "Erro ao traduzir mensagem: #{e.message}"
-    { error: e.message }.to_json
+    return { error: e.message }.to_json
   end
 end
 
 # Rota para enviar mensagens traduzidas para o Slack
 post '/send-to-slack' do
   begin
-    content_type :json
+    content_type 'application/json'
     request.body.rewind
     payload = JSON.parse(request.body.read)
     
@@ -180,14 +180,14 @@ post '/send-to-slack' do
       $messages = $messages.last(50) if $messages.size > 50
       
       $logger.info "Mensagem enviada ao Slack: #{payload['translation'][0..30]}..."
-      { success: true }.to_json
+      return { success: true }.to_json
     else
       status 500
-      { error: "Falha ao enviar mensagem para o Slack" }.to_json
+      return { error: "Falha ao enviar mensagem para o Slack" }.to_json
     end
   rescue => e
     status 500
     $logger.error "Erro ao enviar mensagem para o Slack: #{e.message}"
-    { error: e.message }.to_json
+    return { error: e.message }.to_json
   end
 end

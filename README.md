@@ -42,13 +42,18 @@ Para obter estas credenciais, você precisa criar uma aplicação Slack em https
    * Disponível em: _OAuth & Permissions_ > _Bot User OAuth Token_
    * Certifique-se de que seu bot tenha as permissões: `channels:history`, `channels:read`, `chat:write`
 
-4. **SLACK_CHANNEL_ID**: ID do canal que será monitorado
+4. **SLACK_USER_TOKEN**: Token de usuário para enviar mensagens como você mesmo
+   * Disponível em: _OAuth & Permissions_ > _User OAuth Token_
+   * Adicione os escopos: `chat:write`, `users:read`, `channels:history`
+   * Este token permite que as mensagens sejam enviadas com seu nome de usuário, não como o bot
+
+5. **SLACK_CHANNEL_ID**: ID do canal que será monitorado
    * No Slack, clique com o botão direito no canal > _Copiar link_
    * O ID é a última parte da URL (começa com "C")
 
 #### Configuração do Ollama
 
-5. **OLLAMA_API_URL**: URL da API do Ollama (opcional)
+6. **OLLAMA_API_URL**: URL da API do Ollama (opcional)
    * Valor padrão: `http://localhost:11434`
    * Altere apenas se o Ollama estiver rodando em outra máquina/porta
 
@@ -110,13 +115,18 @@ To obtain these credentials, you need to create a Slack application at https://a
    * Available at: _OAuth & Permissions_ > _Bot User OAuth Token_
    * Make sure your bot has the permissions: `channels:history`, `channels:read`, `chat:write`
 
-4. **SLACK_CHANNEL_ID**: ID of the channel to be monitored
+4. **SLACK_USER_TOKEN**: User token to send messages as yourself
+   * Available at: _OAuth & Permissions_ > _User OAuth Token_
+   * Add the scopes: `chat:write`, `users:read`, `channels:history`
+   * This token allows messages to be sent with your username, not as the bot
+
+5. **SLACK_CHANNEL_ID**: ID of the channel to be monitored
    * In Slack, right-click on the channel > _Copy link_
    * The ID is the last part of the URL (starts with "C")
 
 #### Ollama Configuration
 
-5. **OLLAMA_API_URL**: Ollama API URL (optional)
+6. **OLLAMA_API_URL**: Ollama API URL (optional)
    * Default value: `http://localhost:11434`
    * Change only if Ollama is running on another machine/port
 

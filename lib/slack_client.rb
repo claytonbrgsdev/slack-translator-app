@@ -135,8 +135,9 @@ module SlackClient
     end
   end
   
-  def self.test_message(text="Hello, this is a test message from Slack.")
+  def self.test_message(text="Hello, this is a test message from Slack.", username="Test User")
     ts = Time.now.to_f.to_s
-    process_message(ts, "[TEST] #{text}")
+    message_text = "#{username}: #{text}"
+    process_message(ts, message_text)
   end
 end

@@ -64,8 +64,10 @@
       let user;
       console.log('userData recebido:', userData);
       
-      if (sentByUser) {
-        user = { name: 'You', avatar: 'https://i.pravatar.cc/100?img=7' };
+      // Verificar se a mensagem foi enviada pelo usuário atual (via flag sent_by_me do backend)
+      if (userData && userData.sent_by_me) {
+        console.log('Mensagem identificada como enviada por você (current user)!');
+        user = { name: 'You', avatar: userData.user_image }; // Usar avatar real do usuário
       } else if (userData) {
         // Extrair corretamente os campos enviados pelo servidor
         // Usar diretamente os nomes de campos como são enviados pelo backend (username e user_image)
@@ -207,14 +209,16 @@
               }
             }
             
-            // Determinar se a mensagem foi enviada pelo usuário atual
-            const sentByUser = msg.sent_by_user || false;
+            // Verificar se a mensagem foi enviada pelo usuário atual usando o flag sent_by_me do backend
+            // Importante: usamos sent_by_me e não sent_by_user para manter consistência com o backend
+            console.log('Verificando se mensagem é do usuário atual:', msg.sent_by_me);
             
             // Adicionar a mensagem com as informações reais do usuário
+            // Nota: Removemos o parâmetro sentByUser que não é mais necessário pois estamos usando sent_by_me diretamente do userData
             addMessage(
               msg.original, 
               msg.translation, 
-              sentByUser,
+              false, // Valor não será mais usado, pois userData.sent_by_me terá prioridade
               msg.timestamp * 1000, // Converter timestamp para milissegundos
               userData
             );
@@ -364,14 +368,18 @@
       .then(response => response.json())
       .then(data => {
         if (data.success) {
-          // Adicionar a mensagem aos balões de chat como enviada pelo usuário
-          addMessage(messageInput.value.trim(), currentTranslation, true);
+          // NÃO adicionar a mensagem localmente - vamos apenas esperar o backend atualizar
+          // O backend já adicionou a mensagem com os detalhes corretos do usuário do Slack
+          console.log('Mensagem enviada com sucesso, aguardando atualização do servidor...');
           
           // Limpar o formulário após envio bem-sucedido
           messageInput.value = '';
           translationPreview.textContent = 'Mensagem enviada com sucesso!';
           translationPreview.style.color = 'green';
           currentTranslation = null;
+          
+          // Forçar uma atualização imediata das mensagens
+          setTimeout(() => loadInitialMessages(), 500);
           
           setTimeout(() => {
             translationPreview.textContent = 'A tradução aparecerá aqui...';

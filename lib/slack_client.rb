@@ -6,7 +6,7 @@ require_relative 'ollama_client'
 
 module SlackClient
   class << self
-    attr_accessor :web_client, :logger, :last_timestamp
+    attr_accessor :web_client, :logger, :last_timestamp, :current_user_id
   end
   
   def self.connect!
@@ -29,7 +29,8 @@ module SlackClient
     
     begin
       auth_test = @web_client.auth_test
-      @logger.info "Conectado ao Slack como: #{auth_test.user} (#{auth_test.team})"
+      @current_user_id = auth_test.user_id # Armazenar o ID do usuário atual
+      @logger.info "Conectado ao Slack como: #{auth_test.user} (#{auth_test.team}) ID: #{@current_user_id}"
       
       @last_timestamp = Time.now.to_i - 300 # Últimos 5 minutos
       Thread.new do
@@ -86,6 +87,16 @@ module SlackClient
     end
   end
   
+  def self.is_current_user?(user_id)
+    # Verificar se o ID do usuário fornecido corresponde ao usuário atual (você)
+    return @current_user_id && user_id && @current_user_id == user_id
+  end
+
+  def self.get_current_user_id
+    # Retornar o ID do usuário atual (você)
+    return @current_user_id
+  end
+
   def self.get_user_info(user_id)
     begin
       return nil unless user_id
@@ -212,15 +223,20 @@ module SlackClient
     end
     
     begin
-      # Incluir informações do usuário na mensagem enviada
-      message = { 
-        original: original, 
-        translation: translation, 
-        timestamp: Time.now.to_i,
-        user_id: user_id,
-        username: username,
-        user_image: user_image
-      }
+      # Verificar se a mensagem foi enviada pelo usuário atual (você)
+    is_current_user = is_current_user?(user_id)
+    @logger.info "Verificando se mensagem é do usuário atual: #{is_current_user} (user_id: #{user_id}, current_user_id: #{@current_user_id})"
+    
+    # Criar a mensagem com todos os dados relevantes
+    message = { 
+      original: original, 
+      translation: translation, 
+      timestamp: Time.now.to_i,
+      user_id: user_id,
+      username: username,
+      user_image: user_image,
+      sent_by_me: is_current_user # Adicionar flag para identificar mensagens do usuário atual
+    }
       
       @logger.info "Enviando mensagem com informações de usuário: ID=#{user_id}, Nome=#{username}, Tem imagem=#{!user_image.nil?}"
       

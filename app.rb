@@ -115,13 +115,22 @@ post '/add-message' do
     message_data = {
       original: payload['original'],
       translation: payload['translation'],
-      timestamp: payload['timestamp']
+      timestamp: payload['timestamp'],
+      # Marcar mensagens adicionadas pelo formulário como enviadas pelo usuário atual
+      sent_by_me: true
     }
+    
+    # Pegar o ID do usuário atual do SlackClient, se disponível
+    current_user_id = SlackClient.get_current_user_id
+    if current_user_id
+      message_data[:user_id] = current_user_id
+    elsif payload['user_id']
+      message_data[:user_id] = payload['user_id']
+    end
     
     # Adicionar explicitamente os dados do usuário se estiverem presentes
     message_data[:username] = payload['username'] if payload['username']
     message_data[:user_image] = payload['user_image'] if payload['user_image']
-    message_data[:user_id] = payload['user_id'] if payload['user_id']
     
     $logger.info "Adicionando mensagem com username=#{payload['username'] || 'nil'} e user_image=#{payload['user_image'] ? 'presente' : 'ausente'}"
     
@@ -197,13 +206,63 @@ post '/send-to-slack' do
     result = SlackClient.send_message_to_channel(payload['translation'])
     
     if result
-      # Adicionar a mensagem à lista local para exibição
-      $messages << {
-        original: payload['original'],
-        translation: payload['translation'],
-        timestamp: Time.now.to_i,
-        sent_by_user: true
-      }
+      # Obter informações do usuário atual do Slack
+      current_user_id = SlackClient.get_current_user_id
+      $logger.info "Enviando mensagem como usuário #{current_user_id}"
+      
+      # Verificar se temos o ID do usuário
+      if current_user_id
+        # Obter detalhes completos do usuário atual
+        user_info = SlackClient.get_user_info(current_user_id)
+        
+        if user_info
+          username = user_info.real_name || 
+                    (user_info.profile&.display_name if user_info.profile&.display_name&.strip.to_s != '') || 
+                    user_info.name
+          
+          # Buscar a imagem do perfil
+          user_image = nil
+          if user_info.profile
+            user_image = user_info.profile.image_512 || 
+                      user_info.profile.image_192 || 
+                      user_info.profile.image_original || 
+                      user_info.profile.image_72 || 
+                      user_info.profile.image_48
+          end
+          
+          $logger.info "Usando detalhes reais do usuário: #{username} (#{current_user_id}) para mensagem enviada via formulário"
+          
+          # Adicionar a mensagem à lista local com todos os detalhes do usuário
+          $messages << {
+            original: payload['original'],
+            translation: payload['translation'],
+            timestamp: Time.now.to_i,
+            user_id: current_user_id,
+            username: username,
+            user_image: user_image,
+            sent_by_me: true  # Marcar como enviada pelo usuário atual
+          }
+        else
+          # Fallback se não conseguirmos obter detalhes do usuário
+          $logger.warn "Não foi possível obter detalhes do usuário #{current_user_id}"
+          $messages << {
+            original: payload['original'],
+            translation: payload['translation'],
+            timestamp: Time.now.to_i,
+            user_id: current_user_id,
+            sent_by_me: true
+          }
+        end
+      else
+        # Fallback se não tivermos o ID do usuário
+        $logger.warn "ID do usuário atual não disponível para mensagem enviada via formulário"
+        $messages << {
+          original: payload['original'],
+          translation: payload['translation'],
+          timestamp: Time.now.to_i,
+          sent_by_me: true
+        }
+      end
       
       $messages = $messages.last(50) if $messages.size > 50
       

@@ -140,4 +140,37 @@ module SlackClient
     message_text = "#{username}: #{text}"
     process_message(ts, message_text)
   end
+  
+  # Método para enviar mensagens para o canal do Slack
+  def self.send_message_to_channel(text)
+    @logger ||= Logger.new(STDOUT)
+    
+    unless @web_client
+      @logger.error "Cliente Slack não está inicializado"
+      return false
+    end
+    
+    begin
+      channel_id = ENV['SLACK_CHANNEL_ID']
+      
+      @logger.info "Enviando mensagem para o canal Slack #{channel_id}: #{text[0..30]}..."
+      
+      response = @web_client.chat_postMessage(
+        channel: channel_id,
+        text: text,
+        as_user: true
+      )
+      
+      if response && response.ok
+        @logger.info "Mensagem enviada com sucesso para o Slack: #{response.ts}"
+        return true
+      else
+        @logger.error "Erro ao enviar mensagem para o Slack: #{response.error}"
+        return false
+      end
+    rescue => e
+      @logger.error "Erro ao enviar mensagem para o Slack: #{e.message}"
+      return false
+    end
+  end
 end

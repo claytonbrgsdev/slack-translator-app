@@ -78,6 +78,23 @@
     <p id="status-message" style="color: green; display: none;">Mensagem de teste enviada!</p>
   </div>
   
+  <div id="message-form" style="margin-top: 30px; padding: 20px; background-color: #f5f5f5; border-radius: 8px;">
+    <h3>Enviar mensagem para o Slack</h3>
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <textarea id="message-input" placeholder="Escreva sua mensagem em português..." rows="4" style="padding: 8px; border-radius: 4px; border: 1px solid #ccc;"></textarea>
+      <div style="display: flex; gap: 10px; justify-content: space-between;">
+        <div style="flex-grow: 1; background-color: #eee; padding: 8px; border-radius: 4px; min-height: 50px;">
+          <p style="margin: 0 0 5px 0; font-size: 0.8em; color: #666;">Visualização da tradução:</p>
+          <p id="translation-preview" style="margin: 0; font-style: italic;">A tradução aparecerá aqui...</p>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 10px; justify-content: center;">
+          <button id="translate-button" style="padding: 8px 16px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Traduzir</button>
+          <button id="send-button" style="padding: 8px 16px; background-color: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer;" disabled>Enviar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  
   <script>
     document.getElementById('test-button').addEventListener('click', function() {
       const statusEl = document.getElementById('status-message');
@@ -99,6 +116,118 @@
           statusEl.textContent = 'Erro ao enviar mensagem de teste';
           statusEl.style.color = 'red';
         });
+    });
+    
+    // Código para o formulário de envio de mensagem
+    const messageInput = document.getElementById('message-input');
+    const translationPreview = document.getElementById('translation-preview');
+    const translateButton = document.getElementById('translate-button');
+    const sendButton = document.getElementById('send-button');
+    
+    let currentTranslation = null;
+    
+    // Função para traduzir o texto
+    translateButton.addEventListener('click', function() {
+      const messageText = messageInput.value.trim();
+      
+      if (!messageText) {
+        translationPreview.textContent = 'Por favor, escreva uma mensagem primeiro.';
+        translationPreview.style.color = 'red';
+        return;
+      }
+      
+      translationPreview.textContent = 'Traduzindo...';
+      translationPreview.style.color = '';
+      sendButton.disabled = true;
+      
+      // Enviando o texto para tradução via API
+      fetch('/translate-to-english', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ text: messageText })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.translation) {
+          translationPreview.textContent = data.translation;
+          currentTranslation = data.translation;
+          sendButton.disabled = false;
+        } else {
+          translationPreview.textContent = 'Erro ao traduzir: ' + (data.error || 'Erro desconhecido');
+          translationPreview.style.color = 'red';
+          sendButton.disabled = true;
+        }
+      })
+      .catch(error => {
+        console.error('Erro na tradução:', error);
+        translationPreview.textContent = 'Erro ao traduzir. Tente novamente.';
+        translationPreview.style.color = 'red';
+        sendButton.disabled = true;
+      });
+    });
+    
+    // Função para enviar a mensagem traduzida
+    sendButton.addEventListener('click', function() {
+      if (!currentTranslation) {
+        return;
+      }
+      
+      sendButton.disabled = true;
+      sendButton.textContent = 'Enviando...';
+      
+      // Enviando a mensagem traduzida para o Slack
+      fetch('/send-to-slack', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          original: messageInput.value.trim(),
+          translation: currentTranslation
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          // Limpar o formulário após envio bem-sucedido
+          messageInput.value = '';
+          translationPreview.textContent = 'Mensagem enviada com sucesso!';
+          translationPreview.style.color = 'green';
+          currentTranslation = null;
+          
+          setTimeout(() => {
+            translationPreview.textContent = 'A tradução aparecerá aqui...';
+            translationPreview.style.color = '';
+          }, 3000);
+        } else {
+          translationPreview.textContent = 'Erro ao enviar: ' + (data.error || 'Erro desconhecido');
+          translationPreview.style.color = 'red';
+          sendButton.disabled = false;
+        }
+      })
+      .catch(error => {
+        console.error('Erro ao enviar mensagem:', error);
+        translationPreview.textContent = 'Erro ao enviar. Tente novamente.';
+        translationPreview.style.color = 'red';
+        sendButton.disabled = false;
+      })
+      .finally(() => {
+        sendButton.textContent = 'Enviar';
+      });
+    });
+    
+    // Desabilitar botão de envio quando o texto for alterado
+    messageInput.addEventListener('input', function() {
+      sendButton.disabled = true;
+      if (messageInput.value.trim()) {
+        translationPreview.textContent = 'Clique em "Traduzir" para ver a prévia da tradução.';
+        translationPreview.style.color = '';
+      } else {
+        translationPreview.textContent = 'A tradução aparecerá aqui...';
+        translationPreview.style.color = '';
+      }
     });
   </script>
 </body>

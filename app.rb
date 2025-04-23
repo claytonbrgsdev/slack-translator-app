@@ -99,6 +99,50 @@ get '/status' do
   }.to_json
 end
 
+# Novo endpoint para obter informações do usuário autenticado
+get '/current-user-info' do
+  content_type :json
+  
+  if $slack_available
+    current_user_id = SlackClient.get_current_user_id
+    $logger.info "Fornecendo ID do usuário atual via API: #{current_user_id || 'não disponível'}"
+    
+    if current_user_id
+      # Obter informações detalhadas do usuário se tivermos o ID
+      user_info = SlackClient.get_user_info(current_user_id)
+      
+      if user_info
+        username = user_info.real_name || 
+                 (user_info.profile&.display_name if user_info.profile&.display_name&.strip.to_s != '') || 
+                 user_info.name
+        
+        # Buscar a imagem do perfil
+        user_image = nil
+        if user_info.profile
+          user_image = user_info.profile.image_512 || 
+                     user_info.profile.image_192 || 
+                     user_info.profile.image_original || 
+                     user_info.profile.image_72 || 
+                     user_info.profile.image_48
+        end
+        
+        return {
+          user_id: current_user_id,
+          username: username,
+          user_image: user_image
+        }.to_json
+      end
+    end
+    
+    # Fallback se não conseguirmos obter as informações do usuário
+    return { user_id: current_user_id }.to_json
+  end
+  
+  # Se o Slack não estiver disponível
+  status 503
+  { error: "Integração com Slack não está disponível" }.to_json
+end
+
 post '/add-message' do
   begin
     request.body.rewind

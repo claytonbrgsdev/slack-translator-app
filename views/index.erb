@@ -38,6 +38,36 @@
       name: null,    // Seu nome de usuário
       avatar: null   // URL do seu avatar
     };
+    
+    // Função para buscar o ID do usuário atual diretamente do servidor
+    async function fetchCurrentUserInfo() {
+      try {
+        console.log('Buscando informações do usuário atual...');
+        const response = await fetch('/current-user-info');
+        
+        if (response.ok) {
+          const data = await response.json();
+          
+          if (data.user_id) {
+            myUserInfo.userId = data.user_id;
+            myUserInfo.name = data.username || 'You';
+            myUserInfo.avatar = data.user_image;
+            
+            console.log('IMPORTANTE: ID do usuário atual (você) obtido com sucesso:', myUserInfo.userId);
+            console.log('Suas informações de usuário:', myUserInfo);
+            return true;
+          } else {
+            console.warn('API retornou resposta OK mas sem ID de usuário.');
+          }
+        } else {
+          console.warn('Falha ao buscar informações do usuário atual:', response.status);
+        }
+      } catch (error) {
+        console.error('Erro ao buscar informações do usuário atual:', error);
+      }
+      
+      return false;
+    }
 
     function formatTimestamp(timestamp) {
       if (!timestamp) timestamp = Date.now();
@@ -71,22 +101,15 @@
       let user;
       console.log('userData recebido:', userData);
       
-      // NOVA ABORDAGEM: Detectamos o usuário atual (você) olhando para o ID do usuário
-      // Se você já enviou alguma mensagem marcada como 'sent_by_me', armazenamos seu ID para comparação futura
-      if (userData && userData.user_id && userData.sent_by_me && !myUserInfo.userId) {
-        console.log('Primeira mensagem do usuário atual detectada! Salvando seu ID para referência.');
-        myUserInfo.userId = userData.user_id;
-        myUserInfo.name = userData.username;
-        myUserInfo.avatar = userData.user_image;
-        console.log('Seu ID de usuário:', myUserInfo.userId);
-      }
+      // NOVA ABORDAGEM ROBUSTA: Agora temos seu ID de usuário real do endpoint /current-user-info
+      // Isso torna a detecção muito mais confiável e não depende da ordem das mensagens
       
-      // Verificar se a mensagem é realmente sua comparando IDs
-      const isReallyYou = userData && userData.user_id && 
-                         ((myUserInfo.userId && userData.user_id === myUserInfo.userId) || 
-                          userData.sent_by_me);
+      // Verificar estritamente se a mensagem é sua comparando apenas com seu ID conhecido
+      // Ignoramos completamente o flag sent_by_me que está causando problemas
+      const isReallyYou = userData && userData.user_id && myUserInfo.userId && 
+                         userData.user_id === myUserInfo.userId;
       
-      console.log(`Verificando mensagem - ID: ${userData?.user_id || 'desconhecido'}, Seu ID: ${myUserInfo.userId || 'desconhecido'}, É realmente você? ${isReallyYou}`);
+      console.log(`Verificando mensagem - ID do usuário: ${userData?.user_id || 'desconhecido'}, Seu ID: ${myUserInfo.userId || 'desconhecido'}, É realmente você? ${isReallyYou}`);
       
       if (isReallyYou) {
         // É realmente uma mensagem sua
@@ -271,7 +294,12 @@
         });
     }
     
-    window.addEventListener('load', function() {
+    window.addEventListener('load', async function() {
+      // Primeiro buscar as informações do usuário autenticado
+      console.log('Inicializando aplicação SlackTranslator...');
+      await fetchCurrentUserInfo();
+      
+      // Depois carregar as mensagens iniciais
       loadInitialMessages();
       
       setInterval(function() {
